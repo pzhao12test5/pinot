@@ -2,12 +2,15 @@ package com.linkedin.thirdeye.detector.email.filter;
 
 import com.linkedin.thirdeye.anomalydetection.context.AnomalyFeedback;
 import com.linkedin.thirdeye.constant.AnomalyFeedbackType;
+import com.linkedin.thirdeye.constant.AnomalyResultSource;
 import com.linkedin.thirdeye.datalayer.dto.MergedAnomalyResultDTO;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
+
+import static com.linkedin.thirdeye.detector.email.filter.UserReportUtils.*;
 
 
 /**
@@ -35,6 +38,7 @@ public class PrecisionRecallEvaluator {
    */
   public PrecisionRecallEvaluator(AlertFilter alertFilter, List<MergedAnomalyResultDTO> anomalies) {
     this.alertFilter = alertFilter;
+    this.isProjected = true;
     init(anomalies);
   }
 
@@ -46,6 +50,7 @@ public class PrecisionRecallEvaluator {
   private int notifiedNotLabeled;  // Anomaly is notified, but not labeled
   private int userReportTrueAnomaly; // Anomaly is user reported: true anomaly that was not sent out
   private int userReportTrueAnomalyNewTrend; // Anomaly is user reported: true anomaly new trend that was not sent out
+  private boolean isProjected = false;
 
   public static final String PRECISION = "precision";
   public static final String WEIGHTED_PRECISION = "weightedPrecision";
@@ -159,29 +164,40 @@ public class PrecisionRecallEvaluator {
         isLabeledTrueAnomaly = true;
       }
 
-      boolean isNotified = anomaly.isNotified();
-      // if alert filter is not null as provided by the constructor, proceed to evaluating the performance of alert filter using "isQualified"
-      if (alertFilter != null) {
-        isNotified = alertFilter.isQualified(anomaly);
-      }
-
-      if (isNotified) {
-        if (feedback == null || feedback.getFeedbackType() == null) {
-          this.notifiedNotLabeled++;
-        } else if (isLabeledTrueAnomaly) {
-          notifiedTrueAnomaly++;
-        } else if (isLabeledTrueAnomalyNewTrend) {
-          notifiedTrueAnomalyNewTrend++;
+      // handle user report anomaly
+      if (anomaly.getAnomalyResultSource().equals(AnomalyResultSource.USER_LABELED_ANOMALY)) {
+        if (!isProjected) {
+          if (isLabeledTrueAnomaly) {
+            userReportTrueAnomaly++;
+          } else if (isLabeledTrueAnomalyNewTrend) {
+            userReportTrueAnomalyNewTrend++;
+          }
         } else {
-          notifiedFalseAlarm++;
+          if (isUserReportAnomalyIsQualified(this.alertFilter, anomaly, anomalies)) {
+            notifiedTrueAnomaly++;
+          } else {
+            userReportTrueAnomaly++;
+          }
         }
       } else {
-        if (isLabeledTrueAnomaly) {
-          userReportTrueAnomaly++;
-        } else if (isLabeledTrueAnomalyNewTrend) {
-          userReportTrueAnomalyNewTrend++;
+        // if system detected anomaly, if using projected evaluation, skip those true anomalies that are not notified
+        // since these anomalies are originally unsent, but reverted the feedback based on user report
+        boolean isNotified = isProjected ? alertFilter.isQualified(anomaly) : anomaly.isNotified();
+
+        if (isNotified) {
+          if (feedback == null || feedback.getFeedbackType() == null) {
+            this.notifiedNotLabeled++;
+          } else if (isLabeledTrueAnomaly) {
+            notifiedTrueAnomaly++;
+          } else if (isLabeledTrueAnomalyNewTrend) {
+            notifiedTrueAnomalyNewTrend++;
+          } else {
+            notifiedFalseAlarm++;
+          }
         }
       }
+
+
     }
   }
 

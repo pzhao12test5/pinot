@@ -345,6 +345,8 @@ public class PinotSegmentUploadRestletResource {
         File indexDir = files[0];
 
         SegmentMetadata segmentMetadata = new SegmentMetadataImpl(indexDir);
+        segmentMetadata.getSegmentPushStatus();
+
         String clientAddress = InetAddress.getByName(request.getRemoteAddr()).getHostName();
         LOGGER.info("Processing upload request for segment '{}' from client '{}'", segmentMetadata.getName(),
             clientAddress);
